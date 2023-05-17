@@ -1,0 +1,54 @@
+name: Deploy to main
+on:
+  push:
+    branches: [main]
+
+env:
+  ACR_LOGON_SERVER: ${{ secrets.ACR_NAME }}.azurecr.io
+  IMAGE_NAME_CLOUDSTATION: ${{ secrets.ACR_NAME }}.azurecr.io/react-design-patterns:latest
+  NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
+
+jobs:
+  build-push-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      # checkout the repo
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@master
+
+      - name: 'Login to Azure Container Registry'
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_LOGON_SERVER }}
+          username: ${{ secrets.SERVICE_PRINCIPAL_ID }}
+          password: ${{ secrets.SERVICE_PRINCIPAL_PASSWORD }}
+
+      - name: 'Build and push react-design-patterns image'
+        run: |
+          docker build react-design-patterns -t ${{ env.IMAGE_NAME_CLOUDSTATION }} .
+          docker push ${{ env.IMAGE_NAME_CLOUDSTATION }}
+
+  deploy-to-nomad:
+    needs: build-push-image
+    runs-on: ubuntu-latest
+
+    steps:
+      # checkout the repo
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@master
+
+      - run: sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+      - run: wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      - run: gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+      - run: echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+      - run: sudo apt update
+      - run: sudo apt-get install nomad --fix-missing
+
+      # Deploy to Nomad Cluster dev
+      - name: 'Deploy to Nomad Cluster dev'
+        run: nomad job run main.hcl
+        working-directory: .deploy
+        env:
+          NOMAD_ADDR: ${{ secrets.NOMAD_ADDR }}
+          NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
