@@ -7,3 +7,5 @@ RUN cp -a /tmp/app/node_modules /usr/src/app
 WORKDIR /usr/src/app
 RUN if [ -f tsconfig.json ]; then         npm install         typescript         && npm run build-ts         fi 
 CMD ["node","dist/main.js"]
+
+baqir edited this
